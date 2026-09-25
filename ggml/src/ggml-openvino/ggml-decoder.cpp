@@ -87,6 +87,30 @@ void GgmlOvDecoder::update_io(ggml_cgraph * cgraph) {
     compute_model_outputs();
 }
 
+bool GgmlOvDecoder::is_bound_to(const ggml_cgraph * cgraph) const {
+    if (cgraph != m_cgraph || static_cast<size_t>(cgraph->n_nodes) != m_node_info_list.size()) {
+        return false;
+    }
+    for (int i = 0; i < cgraph->n_nodes; i++) {
+        const auto * node = cgraph->nodes[i];
+        const auto & info = m_node_info_list[i];
+        if (node != info.node) {
+            return false;
+        }
+        size_t k = 0;
+        for (const auto * src : node->src) {
+            if (src == nullptr) {
+                continue;
+            }
+            if (k >= info.node_inputs_names.size() || info.node_inputs.at(info.node_inputs_names[k]) != src) {
+                return false;
+            }
+            k++;
+        }
+    }
+    return true;
+}
+
 GgmlOvDecoder::GgmlOvDecoder(ggml_cgraph * cgraph, std::map<std::string, std::shared_ptr<ov::Node>> & model_weights) {
     m_cgraph = cgraph;
     m_model_weights = model_weights;

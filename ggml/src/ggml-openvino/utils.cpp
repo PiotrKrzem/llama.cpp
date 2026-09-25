@@ -728,12 +728,12 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, const std::share
             if (stateful) {
                 const auto * inp_pos = get_inp_pos_tensor(cgraph);
                 int32_t * pos_data = (int32_t *) inp_pos->data;
-                auto pos_shape = GgmlOvDecoder::get_shape(inp_pos);
+                const auto n_tokens = static_cast<size_t>(get_inp_pos_n_tokens(cgraph, inp_pos));
                 if (pos_data[0] == 0) {
                     infer_request->reset_state();
-                    r_ctx->stateful_kv_size = pos_shape[3];
+                    r_ctx->stateful_kv_size = n_tokens;
                 } else if (r_ctx->stateful_kv_size == static_cast<size_t>(pos_data[0])) {
-                    r_ctx->stateful_kv_size += pos_shape[3];
+                    r_ctx->stateful_kv_size += n_tokens;
                 } else {
                     const size_t pos_begin = static_cast<size_t>(pos_data[0]);
                     const bool refill = pos_begin > r_ctx->stateful_kv_size;
@@ -817,7 +817,7 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, const std::share
                         ov::Tensor new_state_tensor(state_tensor, begin, end);
                         state.set_state(new_state_tensor);
                     }
-                    r_ctx->stateful_kv_size = pos_begin + pos_shape[3];
+                    r_ctx->stateful_kv_size = pos_begin + n_tokens;
                 }
             }
 
@@ -1027,7 +1027,6 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, const std::share
 
             if (stateful && cache_enabled) {
                 const auto * inp_pos = get_inp_pos_tensor(cgraph);
-                auto pos_shape = GgmlOvDecoder::get_shape(inp_pos);
                 // A freshly compiled model starts with an empty state, so it can only serve a
                 // sequence from its beginning. A non-zero start position means the KV history was
                 // built elsewhere (a restored ggml cache), which the state cannot adopt.
@@ -1040,7 +1039,7 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, const std::share
                         pos_begin);
                     return GGML_STATUS_FAILED;
                 }
-                r_ctx->stateful_kv_size = pos_shape[3];
+                r_ctx->stateful_kv_size = static_cast<size_t>(get_inp_pos_n_tokens(cgraph, inp_pos));
                 const auto kv_param_res_names = ggml_decoder->get_kv_param_res_names();
                 for (const auto & pair : kv_param_res_names) {
                     r_ctx->kv_state_input_name_map[pair.first + pair.second] = pair.first;

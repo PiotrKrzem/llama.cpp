@@ -1297,6 +1297,11 @@ const ggml_tensor * GgmlOvDecoder::get_tensor_from_name(const std::string & name
 std::map<std::string, std::string> GgmlOvDecoder::get_kv_param_res_names() const {
     std::map<std::string, std::string> kv_param_res_names;
     for (const auto & name : m_model_params.kv_names) {
+        // Recurrent state caches (llama-memory-recurrent's cache_r_l*/cache_s_l*) stay ggml-owned
+        // Parameter/Result pairs: ggml resets, reorders and checkpoints them itself.
+        if (name.rfind("cache_r_l", 0) == 0 || name.rfind("cache_s_l", 0) == 0) {
+            continue;
+        }
         kv_param_res_names[name] = name;
     }
     return kv_param_res_names;

@@ -117,7 +117,8 @@ std::pair<ov::Output<Node>, ov::Output<Node>> make_sin_cos(int32_t * rope_params
                                                            std::shared_ptr<ov::Node> inp_pos,
                                                            std::shared_ptr<ov::Node> rope_freqs_weight,
                                                            bool imrope,
-                                                           bool stateful) {
+                                                           bool stateful,
+                                                           bool mrope) {
     if (stateful) {
         inp_pos =
             std::make_shared<ov::op::v0::Squeeze>(inp_pos, ov::op::v0::Constant::create(ov::element::i64, {1}, {0}));
@@ -125,7 +126,7 @@ std::pair<ov::Output<Node>, ov::Output<Node>> make_sin_cos(int32_t * rope_params
         auto pos_perm =
             std::make_shared<ov::op::v0::Constant>(ov::element::i64, ov::Shape{3}, std::vector<int64_t>{2, 1, 0});
         inp_pos = std::make_shared<ov::op::v1::Transpose>(inp_pos, pos_perm);
-    } else if (imrope) {
+    } else if (imrope || mrope) {
         inp_pos = std::make_shared<ov::op::v0::Convert>(inp_pos, ov::element::f32);
         auto pos_shape = ov::op::v0::Constant::create(ov::element::i64, ov::Shape{5}, {0, 0, 0, 4, -1});
         inp_pos = std::make_shared<ov::op::v1::Reshape>(inp_pos, pos_shape, true);
@@ -163,10 +164,24 @@ std::pair<ov::Output<Node>, ov::Output<Node>> make_sin_cos(int32_t * rope_params
 
     Output<Node> theta;
     float mscale = attn_factor;
-    if (imrope) {
+    if (imrope || mrope) {
         std::vector<int64_t> gather_indices(n_dims_half);
+        // MROPE: the dim pairs are split into contiguous t/h/w/e sections (rope_params[11..14]),
+        // repeating every sum(sections) pairs. IMROPE interleaves t/h/w instead.
+        const int sec_t = rope_params[11];
+        const int sec_h = sec_t + rope_params[12];
+        const int sec_w = sec_h + rope_params[13];
+        const int sect_dims = sec_w + rope_params[14];
+        if (mrope) {
+            FRONT_END_GENERAL_CHECK(sect_dims > 0, "MROPE requires at least one non-empty section");
+        }
         for (size_t j = 0; j < n_dims_half; j++) {
-            gather_indices[j] = j % 3;
+            if (mrope) {
+                const int sector = static_cast<int>(j) % sect_dims;
+                gather_indices[j] = sector < sec_t ? 0 : sector < sec_h ? 1 : sector < sec_w ? 2 : 3;
+            } else {
+                gather_indices[j] = j % 3;
+            }
             factor[j] = std::pow(theta_scale, j);
         }
         auto gather_indices_const =
@@ -236,7 +251,7 @@ std::pair<ov::Output<Node>, ov::Output<Node>> make_sin_cos(int32_t * rope_params
     Output<Node> cos_theta = std::make_shared<ov::op::v0::Cos>(theta);
     Output<Node> sin_theta = std::make_shared<ov::op::v0::Sin>(theta);
 
-    if (!imrope) {
+    if (!imrope && !mrope) {
         auto mscale_node = ov::op::v0::Constant::create(ov::element::f32, Shape{}, {mscale});
 
         cos_theta = std::make_shared<ov::op::v1::Multiply>(cos_theta, mscale_node);

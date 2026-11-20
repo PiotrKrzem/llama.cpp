@@ -386,6 +386,10 @@ int GgmlOvDecoder::compute_op_case(const ggml_tensor * node) const {
             op_case = 2;
             break;
         }
+        case GGML_ROPE_TYPE_MROPE: {
+            op_case = 3;
+            break;
+        }
         default:
             op_case = 0;
             break;
@@ -976,7 +980,7 @@ ov::PartialShape GgmlOvDecoder::get_graph_input_shape(const ggml_tensor * op,
         // tokens or positions
         int len = m_is_static ? (m_is_prefill ? m_prefill_chunk_size : 1) : -1;
         if (m_is_static && is_inp_pos(input, op)) {
-            // IMROPE stacks n_planes (t/h/w/e) position planes back to back
+            // IMROPE/MROPE stack n_planes (t/h/w/e) position planes back to back
             len *= get_inp_pos_n_planes(op);
         }
         input_shape = ov::PartialShape{1, 1, 1, len};

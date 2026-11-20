@@ -44,6 +44,7 @@ OutputVector translate_rope(const NodeContext & context) {
     constexpr int TYPE_NORMAL = 0;
     constexpr int TYPE_NEOX = 1;
     constexpr int TYPE_IMROPE = 2;
+    constexpr int TYPE_MROPE = 3;
 
     Output<Node> cos_theta_node;
     Output<Node> sin_theta_node;
@@ -67,7 +68,8 @@ OutputVector translate_rope(const NodeContext & context) {
             if (context.get_input_size() == 3) {
                 rope_freqs_weight = context.get_input(2).get_node_shared_ptr();
             }
-            auto sin_cos = make_sin_cos(op_params, inp_pos, rope_freqs_weight, mode == TYPE_IMROPE, false);
+            auto sin_cos =
+                make_sin_cos(op_params, inp_pos, rope_freqs_weight, mode == TYPE_IMROPE, false, mode == TYPE_MROPE);
             sin_theta_node = sin_cos.first;
             cos_theta_node = sin_cos.second;
             context.put_shared(cache_key + "_cos", cos_theta_node);
@@ -167,8 +169,8 @@ OutputVector translate_rope(const NodeContext & context) {
         } else {
             res = std::make_shared<ov::op::v0::Concat>(concat_parts, -1);
         }
-    } else if (mode == TYPE_NEOX || mode == TYPE_IMROPE) {
-        if (mode == TYPE_IMROPE) {
+    } else if (mode == TYPE_NEOX || mode == TYPE_IMROPE || mode == TYPE_MROPE) {
+        if (mode == TYPE_IMROPE || mode == TYPE_MROPE) {
             auto cos_sin_shape = std::make_shared<ov::op::v0::Constant>(ov::element::i64, ov::Shape{4},
                                                                         std::vector<int64_t>{1, -1, 1, (n_dims >> 1)});
             cos_theta_node = std::make_shared<ov::op::v1::Reshape>(cos_theta_node, cos_sin_shape, true);

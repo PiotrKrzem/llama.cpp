@@ -1359,7 +1359,8 @@ static ggml_openvino_op_support is_op_supported_case(const ggml_tensor * op) {
         const int n_dims = op_params[1];
         const int mode = op_params[2];
         const int64_t n_offs = op_params[15];
-        if (mode != GGML_ROPE_TYPE_NORMAL && mode != GGML_ROPE_TYPE_NEOX && mode != GGML_ROPE_TYPE_IMROPE) {
+        if (mode != GGML_ROPE_TYPE_NORMAL && mode != GGML_ROPE_TYPE_NEOX && mode != GGML_ROPE_TYPE_MROPE &&
+            mode != GGML_ROPE_TYPE_IMROPE) {
             return {false, "ROPE with mode " + std::to_string(mode) + " is not supported"};
         }
         if (n_offs < 0 || (n_offs % 2) != 0) {
@@ -1388,9 +1389,14 @@ static ggml_openvino_op_support is_op_supported_case(const ggml_tensor * op) {
         memcpy(&freq_scale,  op_params + 6, sizeof(float));
         memcpy(&ext_factor,  op_params + 7, sizeof(float));
         memcpy(&attn_factor, op_params + 8, sizeof(float));
-        if (mode == GGML_ROPE_TYPE_IMROPE &&
+        if ((mode == GGML_ROPE_TYPE_IMROPE || mode == GGML_ROPE_TYPE_MROPE) &&
             (op->src[2] != nullptr || freq_scale != 1.0f || ext_factor != 0.0f || attn_factor != 1.0f)) {
-            return {false, "IMROPE with freq_factors, freq_scale, ext_factor, or attn_factor is not supported"};
+            return {false, "IMROPE/MROPE with freq_factors, freq_scale, ext_factor, or attn_factor is not supported"};
+        }
+        if (mode == GGML_ROPE_TYPE_MROPE &&
+            (op_params[11] < 0 || op_params[12] < 0 || op_params[13] < 0 || op_params[14] < 0 ||
+             op_params[11] + op_params[12] + op_params[13] + op_params[14] == 0)) {
+            return {false, "MROPE with empty or negative sections is not supported"};
         }
         break;
     }

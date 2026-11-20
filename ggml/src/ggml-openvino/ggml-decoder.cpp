@@ -1042,6 +1042,12 @@ ov::PartialShape GgmlOvDecoder::get_graph_input_shape(const ggml_tensor * op,
         // index list has a static length; on CPU/GPU it may change across compiles (defrag).
         input_shape = m_is_static ? ov::PartialShape{get_shape(input)} : ov::PartialShape{1, 1, 1, -1};
 
+    } else if (!m_is_static && input != nullptr && is_inp_embd_leaf(input, op)) {
+        // Pre-computed input embeddings (multimodal image chunks): the token count changes between
+        // ubatches, e.g. a 1369-token image is decoded as 512 + 512 + 345. Without a dynamic token
+        // dimension the model compiled for the first ubatch is reused for the 345-token tail and
+        // set_tensor fails with a shape mismatch.
+        input_shape = ov::PartialShape{1, 1, -1, input->ne[0]};
     } else {
         input_shape = ov::PartialShape{get_shape(input)};
     }
@@ -1966,6 +1972,11 @@ void GgmlOvDecoder::compute_node_dynamic_dims() {
             } else {
                 if (is_inp_tok(src, node) || is_inp_pos(src, node) || is_output_idx(src, node)) {
                     m_node_dynamic_dims[src] = 0;
+                    continue;
+                }
+                if (!m_is_static && is_inp_embd_leaf(src, node)) {
+                    // [n_embd, n_tokens]: the token count is dimension 1, like a GET_ROWS result
+                    m_node_dynamic_dims[src] = 1;
                     continue;
                 }
                 if (node->op == GGML_OP_VIEW && src->op == GGML_OP_NONE && !is_stateful() && !m_model_is_splitted) {

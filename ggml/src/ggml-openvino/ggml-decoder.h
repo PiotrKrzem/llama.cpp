@@ -375,6 +375,13 @@ public:
         return tensor->op == GGML_OP_GET_ROWS && op->op == GGML_OP_RMS_NORM;
     }
 
+    // Pre-computed input embeddings (multimodal image chunks) feed the first RMS_NORM directly
+    // instead of going through a GET_ROWS on token ids.
+    static bool is_inp_embd_leaf(const ggml_tensor * tensor, const ggml_tensor * op) {
+        return op->op == GGML_OP_RMS_NORM && tensor == op->src[0] && tensor->op == GGML_OP_NONE &&
+               (tensor->flags & GGML_TENSOR_FLAG_INPUT);
+    }
+
     static bool is_inp_mask(const ggml_tensor * tensor, const ggml_tensor * op) {
         return op->op == GGML_OP_CPY || (op->op == GGML_OP_FLASH_ATTN_EXT && tensor == op->src[3]) ||
                (op->op == GGML_OP_SOFT_MAX && tensor == op->src[1]);
